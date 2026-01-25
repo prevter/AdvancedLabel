@@ -631,7 +631,7 @@ void Label::updateCharsWrapped() {
             words.push_back(textSV.substr(wordStart, i - wordStart + 1));
             lines.push_back(std::move(words));
             words.clear();
-        } else if (m_breakWords > 0 && i - wordStart >= m_breakWords) {
+        } else if (m_breakWords > 0 && i - wordStart >= static_cast<size_t>(m_breakWords)) {
             words.push_back(textSV.substr(wordStart, i - wordStart));
             wordStart = i;
         }
