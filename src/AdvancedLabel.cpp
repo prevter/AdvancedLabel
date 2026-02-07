@@ -2,8 +2,7 @@
 #include <Geode/loader/Log.hpp>
 #include <Geode/utils/general.hpp>
 #include <Geode/utils/string.hpp>
-#include <iostream>
-#include <sstream>
+#include <Geode/utils/StringMap.hpp>
 
 #include <Geode/modify/GameManager.hpp>
 struct ClearCacheGMHook : geode::Modify<ClearCacheGMHook, GameManager> {
@@ -13,12 +12,12 @@ struct ClearCacheGMHook : geode::Modify<ClearCacheGMHook, GameManager> {
     }
 };
 
-std::unordered_map<std::string, BMFontConfiguration>& getFontConfigs() {
-    static std::unordered_map<std::string, BMFontConfiguration> s_fontConfigs;
+geode::utils::StringMap<BMFontConfiguration>& getFontConfigs() {
+    static geode::utils::StringMap<BMFontConfiguration> s_fontConfigs;
     return s_fontConfigs;
 }
 
-BMFontConfiguration* BMFontConfiguration::create(std::string const& fntFile) {
+BMFontConfiguration* BMFontConfiguration::create(geode::ZStringView fntFile) {
     auto& s_fontConfigs = getFontConfigs();
 
     // check if the font config is already loaded
@@ -39,18 +38,20 @@ void BMFontConfiguration::purgeCachedData() {
     getFontConfigs().clear();
 }
 
-bool BMFontConfiguration::initWithFNTfile(std::string const& fntFile) {
+bool BMFontConfiguration::initWithFNTfile(geode::ZStringView fntFile) {
     #if defined(GEODE_IS_MOBILE) || !defined(NDEBUG)
     // on android, accessing internal assets manually won't work,
     // so we're just going to use cocos functions as intended.
     // oh and fullPathForFilename apparently crashes in debug mode, so we're using this in that case as well
     unsigned long size = 0;
-    auto data = cocos2d::CCFileUtils::sharedFileUtils()->getFileData(fntFile.c_str(), "rb", &size);
+    unsigned char* data = cocos2d::CCFileUtils::sharedFileUtils()->getFileData(fntFile.c_str(), "rb", &size);
     if (!data || size == 0) {
         geode::log::error("Failed to read file '{}'", fntFile);
         return false;
     }
-    auto contents = std::string(reinterpret_cast<char*>(data), size);
+
+    std::unique_ptr<unsigned char[]> dataPtr(data);
+    auto contents = std::string_view(reinterpret_cast<char*>(data), size);
     #else
     // for non-android, we can speed up reading by doing it manually
     std::string fullPath = cocos2d::CCFileUtils::get()->fullPathForFilename(fntFile.c_str(), false);
@@ -61,83 +62,173 @@ bool BMFontConfiguration::initWithFNTfile(std::string const& fntFile) {
     }
     #endif
 
+    m_fntFileName = fntFile;
     return initWithContents(contents, fntFile);
 }
 
-#define WRAP_PARSE(expr) if (auto res = (expr); res.isErr()) { geode::log::error("{}", res.unwrapErr()); return false; }
+namespace {
+    constexpr std::string_view skipWhitespace(std::string_view str) {
+        size_t i = 0;
+        while (i < str.size() && (str[i] == ' ' || str[i] == '\t')) {
+            ++i;
+        }
+        return str.substr(i);
+    }
 
-bool BMFontConfiguration::initWithContents(std::string const& contents, std::string const& fntFile) {
-    std::istringstream stream(contents);
-    std::string line;
+    constexpr std::string_view nextLine(std::string_view& str) {
+        size_t pos = 0;
+        while (pos < str.size() && str[pos] != '\n' && str[pos] != '\r') {
+            ++pos;
+        }
+        auto line = str.substr(0, pos);
 
-    while (std::getline(stream, line)) {
-        if (line.empty()) {
-            continue;
+        if (pos < str.size()) {
+            if (str[pos] == '\r' && pos + 1 < str.size() && str[pos + 1] == '\n') {
+                pos += 2;
+            } else {
+                pos += 1;
+            }
+        }
+        str = str.substr(pos);
+        return line;
+    }
+
+    constexpr std::string_view nextToken(std::string_view& line) {
+        line = skipWhitespace(line);
+        if (line.empty()) return {};
+
+        size_t pos = 0;
+        while (pos < line.size() && line[pos] != ' ' && line[pos] != '\t') {
+            ++pos;
+        }
+        auto token = line.substr(0, pos);
+        line = line.substr(pos);
+        return token;
+    }
+
+    constexpr std::pair<std::string_view, std::string_view> parseKeyValue(std::string_view token) {
+        auto eqPos = token.find('=');
+        if (eqPos == std::string_view::npos) {
+            return {{}, {}};
+        }
+        return {token.substr(0, eqPos), token.substr(eqPos + 1)};
+    }
+
+    constexpr std::string_view extractNumber(std::string_view str) {
+        if (str.empty()) return str;
+
+        size_t i = 0;
+        if (str[i] == '-' || str[i] == '+') ++i;
+
+        while (i < str.size() && str[i] >= '0' && str[i] <= '9') ++i;
+
+        if (i < str.size() && str[i] == '.') {
+            ++i;
+            while (i < str.size() && str[i] >= '0' && str[i] <= '9') ++i;
         }
 
-        std::istringstream lineStream(line);
-        std::string type;
-        lineStream >> type;
+        return str.substr(0, i);
+    }
+
+    template <typename T>
+    T parseNum(std::string_view str) {
+        return geode::utils::numFromString<T>(extractNumber(str)).unwrapOrDefault();
+    }
+
+    void parseCommaSeparatedInts(std::string_view str, int* out, size_t count) {
+        size_t outIdx = 0;
+        size_t start = 0;
+
+        for (size_t i = 0; i <= str.size() && outIdx < count; ++i) {
+            if (i == str.size() || str[i] == ',') {
+                out[outIdx++] = parseNum<int>(str.substr(start, i - start));
+                start = i + 1;
+            }
+        }
+    }
+}
+
+bool BMFontConfiguration::initWithContents(std::string_view contents, geode::ZStringView fntFile) {
+    std::string_view remaining = contents;
+
+    while (!remaining.empty()) {
+        auto line = nextLine(remaining);
+        line = skipWhitespace(line);
+
+        if (line.empty()) continue;
+
+        auto type = nextToken(line);
 
         if (type == "info") {
-            WRAP_PARSE(parseInfoArguments(lineStream));
+            if (auto res = parseInfoArguments(line); res.isErr()) {
+                geode::log::error("{}", res.unwrapErr());
+                return false;
+            }
         } else if (type == "common") {
-            WRAP_PARSE(parseCommonArguments(lineStream));
+            if (auto res = parseCommonArguments(line); res.isErr()) {
+                geode::log::error("{}", res.unwrapErr());
+                return false;
+            }
         } else if (type == "page") {
-            WRAP_PARSE(parseImageFileName(lineStream, fntFile));
+            if (auto res = parseImageFileName(line, fntFile); res.isErr()) {
+                geode::log::error("{}", res.unwrapErr());
+                return false;
+            }
         } else if (type == "char") {
-            WRAP_PARSE(parseCharacterDefinition(lineStream));
+            if (auto res = parseCharacterDefinition(line); res.isErr()) {
+                geode::log::error("{}", res.unwrapErr());
+                return false;
+            }
         } else if (type == "kerning") {
-            WRAP_PARSE(parseKerningEntry(lineStream));
+            if (auto res = parseKerningEntry(line); res.isErr()) {
+                geode::log::error("{}", res.unwrapErr());
+                return false;
+            }
         }
     }
 
     return true;
 }
 
-template <class T>
-T fastParse(std::string_view str) {
-    return geode::utils::numFromString<T>(str).unwrapOrDefault();
-}
+geode::Result<> BMFontConfiguration::parseInfoArguments(std::string_view line) {
+    while (!line.empty()) {
+        auto token = nextToken(line);
+        if (token.empty()) break;
 
-geode::Result<> BMFontConfiguration::parseInfoArguments(std::istringstream& line) {
-    std::string keypair;
-
-    while (line >> keypair) {
-        auto eqPos = keypair.find('=');
-        if (eqPos == std::string::npos) {
-            continue;
-        }
-
-        auto key = keypair.substr(0, eqPos);
-        auto value = keypair.substr(eqPos + 1);
+        auto [key, value] = parseKeyValue(token);
+        if (key.empty()) continue;
 
         if (key == "padding") {
-            std::istringstream paddingStream(value);
-            char comma;
-            paddingStream >> m_padding.left >> comma >> m_padding.top >> comma >> m_padding.right >> comma >> m_padding.bottom;
+            int values[4] = {0, 0, 0, 0};
+            parseCommaSeparatedInts(value, values, 4);
+            m_padding.left = values[0];
+            m_padding.top = values[1];
+            m_padding.right = values[2];
+            m_padding.bottom = values[3];
         }
     }
 
     return geode::Ok();
 }
 
-geode::Result<> BMFontConfiguration::parseImageFileName(std::istringstream& line, std::string const& fntFile) {
-    std::string keypair;
+geode::Result<> BMFontConfiguration::parseImageFileName(std::string_view line, std::string_view fntFile) {
+    while (!line.empty()) {
+        auto token = nextToken(line);
+        if (token.empty()) break;
 
-    while (line >> keypair) {
-        auto eqPos = keypair.find('=');
-        if (eqPos == std::string::npos) {
-            continue;
-        }
-
-        auto key = keypair.substr(0, eqPos);
-        auto value = keypair.substr(eqPos + 1);
+        auto [key, value] = parseKeyValue(token);
+        if (key.empty()) continue;
 
         if (key == "file") {
-            auto relPath = value.substr(1, value.size() - 2); // remove quotes
+            if (value.size() >= 2 && value.front() == '"' && value.back() == '"') {
+                value = value.substr(1, value.size() - 2);
+            }
+
+            geode::utils::StringBuffer fntFileBuf(fntFile);
+            geode::utils::StringBuffer relPathBuf(value);
+
             m_atlasName = cocos2d::CCFileUtils::get()->fullPathFromRelativeFile(
-                relPath.c_str(), fntFile.c_str()
+                relPathBuf.c_str(), fntFileBuf.c_str()
             );
         }
     }
@@ -149,26 +240,22 @@ geode::Result<> BMFontConfiguration::parseImageFileName(std::istringstream& line
     return geode::Ok();
 }
 
-geode::Result<> BMFontConfiguration::parseCommonArguments(std::istringstream& line) {
-    std::string keypair;
+geode::Result<> BMFontConfiguration::parseCommonArguments(std::string_view line) {
+    while (!line.empty()) {
+        auto token = nextToken(line);
+        if (token.empty()) break;
 
-    while (line >> keypair) {
-        auto eqPos = keypair.find('=');
-        if (eqPos == std::string::npos) {
-            continue;
-        }
-
-        auto key = keypair.substr(0, eqPos);
-        auto value = keypair.substr(eqPos + 1);
+        auto [key, value] = parseKeyValue(token);
+        if (key.empty()) continue;
 
         if (key == "lineHeight") {
-            m_commonHeight = fastParse<float>(value);
+            m_commonHeight = parseNum<float>(value);
         } else if (key == "scaleW" || key == "scaleH") {
-            if (fastParse<int>(value) > cocos2d::CCConfiguration::sharedConfiguration()->m_nMaxTextureSize) {
+            if (parseNum<int>(value) > cocos2d::CCConfiguration::sharedConfiguration()->m_nMaxTextureSize) {
                 return geode::Err("Font size exceeds max texture size");
             }
         } else if (key == "pages") {
-            if (fastParse<int>(value) != 1) {
+            if (parseNum<int>(value) != 1) {
                 return geode::Err("Font must have exactly one page");
             }
         }
@@ -177,81 +264,65 @@ geode::Result<> BMFontConfiguration::parseCommonArguments(std::istringstream& li
     return geode::Ok();
 }
 
-geode::Result<> BMFontConfiguration::parseCharacterDefinition(std::istringstream& line) {
+geode::Result<> BMFontConfiguration::parseCharacterDefinition(std::string_view line) {
     BMFontDef def;
-    std::string keypair;
 
-    while (line >> keypair) {
-        auto eqPos = keypair.find('=');
-        if (eqPos == std::string::npos) {
-            continue;
-        }
+    while (!line.empty()) {
+        auto token = nextToken(line);
+        if (token.empty()) break;
 
-        auto key = keypair.substr(0, eqPos);
-        auto value = keypair.substr(eqPos + 1);
+        auto [key, value] = parseKeyValue(token);
+        if (key.empty()) continue;
 
         if (key == "id") {
-            def.charID = fastParse<uint32_t>(value);
+            def.charID = parseNum<uint32_t>(value);
         } else if (key == "x") {
-            def.rect.origin.x = fastParse<int>(value);
+            def.rect.origin.x = parseNum<float>(value);
         } else if (key == "y") {
-            def.rect.origin.y = fastParse<int>(value);
+            def.rect.origin.y = parseNum<float>(value);
         } else if (key == "width") {
-            def.rect.size.width = fastParse<int>(value);
+            def.rect.size.width = parseNum<float>(value);
         } else if (key == "height") {
-            def.rect.size.height = fastParse<int>(value);
+            def.rect.size.height = parseNum<float>(value);
         } else if (key == "xoffset") {
-            def.xOffset = fastParse<float>(value);
+            def.xOffset = parseNum<float>(value);
         } else if (key == "yoffset") {
-            def.yOffset = fastParse<float>(value);
+            def.yOffset = parseNum<float>(value);
         } else if (key == "xadvance") {
-            def.xAdvance = fastParse<float>(value);
+            def.xAdvance = parseNum<float>(value);
         }
     }
 
-    m_fontDefDictionary[def.charID] = def;
-    // m_characterSet.insert(def.charID);
+    m_fontDefDictionary.emplace(def.charID, def);
 
     return geode::Ok();
 }
 
-geode::Result<> BMFontConfiguration::parseKerningEntry(std::istringstream& line) {
-    std::string keypair;
+geode::Result<> BMFontConfiguration::parseKerningEntry(std::string_view line) {
+    uint32_t first = 0;
+    uint32_t second = 0;
+    float amount = 0.0f;
 
-    while (line >> keypair) {
-        auto eqPos = keypair.find('=');
-        if (eqPos == std::string::npos) {
-            continue;
-        }
+    while (!line.empty()) {
+        auto token = nextToken(line);
+        if (token.empty()) break;
 
-        auto key = keypair.substr(0, eqPos);
-        auto value = keypair.substr(eqPos + 1);
+        auto [key, value] = parseKeyValue(token);
+        if (key.empty()) continue;
 
         if (key == "first") {
-            auto first = fastParse<uint32_t>(value);
-            line >> keypair;
-            eqPos = keypair.find('=');
-            if (eqPos == std::string::npos) {
-                return geode::Err("Failed to parse kerning entry first");
-            }
-
-            auto second = fastParse<uint32_t>(keypair.substr(eqPos + 1));
-            line >> keypair;
-            eqPos = keypair.find('=');
-            if (eqPos == std::string::npos) {
-                return geode::Err("Failed to parse kerning entry second");
-            }
-
-            auto amount = fastParse<float>(keypair.substr(eqPos + 1));
-            m_kerningDictionary[{first, second}] = amount;
+            first = parseNum<uint32_t>(value);
+        } else if (key == "second") {
+            second = parseNum<uint32_t>(value);
+        } else if (key == "amount") {
+            amount = parseNum<float>(value);
         }
     }
 
+    m_kerningDictionary.emplace(BMKerningPair{first, second}, amount);
+
     return geode::Ok();
 }
-
-#undef WRAP_PARSE
-
 
 constexpr bool isRegionalIndicator(char32_t c) {
     return c >= 0x1F1E6 && c <= 0x1F1FF;
@@ -318,7 +389,7 @@ struct Rect {
     }
 };
 
-Label* Label::create(std::string_view text, std::string const& font) {
+Label* Label::create(std::string_view text, geode::ZStringView font) {
     auto ret = new Label();
     if (ret->init(text, font, BMFontAlignment::Left, 1.f)) {
         ret->autorelease();
@@ -328,7 +399,7 @@ Label* Label::create(std::string_view text, std::string const& font) {
     return nullptr;
 }
 
-Label* Label::create(std::string_view text, std::string const& font, float scale) {
+Label* Label::create(std::string_view text, geode::ZStringView font, float scale) {
     auto ret = new Label();
     if (ret->init(text, font, BMFontAlignment::Left, scale)) {
         ret->autorelease();
@@ -338,7 +409,7 @@ Label* Label::create(std::string_view text, std::string const& font, float scale
     return nullptr;
 }
 
-Label* Label::create(std::string_view text, std::string const& font, BMFontAlignment alignment) {
+Label* Label::create(std::string_view text, geode::ZStringView font, BMFontAlignment alignment) {
     auto ret = new Label();
     if (ret->init(text, font, alignment, 1.f)) {
         ret->autorelease();
@@ -348,7 +419,7 @@ Label* Label::create(std::string_view text, std::string const& font, BMFontAlign
     return nullptr;
 }
 
-Label* Label::create(std::string_view text, std::string const& font, BMFontAlignment alignment, float scale) {
+Label* Label::create(std::string_view text, geode::ZStringView font, BMFontAlignment alignment, float scale) {
     auto ret = new Label();
     if (ret->init(text, font, alignment, scale)) {
         ret->autorelease();
@@ -358,7 +429,7 @@ Label* Label::create(std::string_view text, std::string const& font, BMFontAlign
     return nullptr;
 }
 
-Label* Label::createWrapped(std::string_view text, std::string const& font, float wrapWidth) {
+Label* Label::createWrapped(std::string_view text, geode::ZStringView font, float wrapWidth) {
     auto ret = new Label();
     if (ret->initWrapped(text, font, BMFontAlignment::Left, 1.f, wrapWidth)) {
         ret->autorelease();
@@ -368,7 +439,7 @@ Label* Label::createWrapped(std::string_view text, std::string const& font, floa
     return nullptr;
 }
 
-Label* Label::createWrapped(std::string_view text, std::string const& font, float scale, float wrapWidth) {
+Label* Label::createWrapped(std::string_view text, geode::ZStringView font, float scale, float wrapWidth) {
     auto ret = new Label();
     if (ret->initWrapped(text, font, BMFontAlignment::Left, scale, wrapWidth)) {
         ret->autorelease();
@@ -378,7 +449,7 @@ Label* Label::createWrapped(std::string_view text, std::string const& font, floa
     return nullptr;
 }
 
-Label* Label::createWrapped(std::string_view text, std::string const& font, BMFontAlignment alignment, float wrapWidth) {
+Label* Label::createWrapped(std::string_view text, geode::ZStringView font, BMFontAlignment alignment, float wrapWidth) {
     auto ret = new Label();
     if (ret->initWrapped(text, font, alignment, 1.f, wrapWidth)) {
         ret->autorelease();
@@ -389,7 +460,7 @@ Label* Label::createWrapped(std::string_view text, std::string const& font, BMFo
 }
 
 Label* Label::createWrapped(
-    std::string_view text, std::string const& font, BMFontAlignment alignment, float scale, float wrapWidth
+    std::string_view text, geode::ZStringView font, BMFontAlignment alignment, float scale, float wrapWidth
 ) {
     auto ret = new Label();
     if (ret->initWrapped(text, font, alignment, scale, wrapWidth)) {
@@ -421,8 +492,8 @@ void Label::setString(std::string_view text) {
     updateChars();
 }
 
-void Label::setFont(std::string const& font) {
-    if (m_font == font) {
+void Label::setFont(geode::ZStringView font) {
+    if (m_fontConfig->getFontFile() == font) {
         return;
     }
 
@@ -432,7 +503,6 @@ void Label::setFont(std::string const& font) {
     }
 
     m_fontConfig = newConfig;
-    m_font = font;
 
     m_mainBatch->setTexture(
         cocos2d::CCTextureCache::get()->addImage(
@@ -443,7 +513,7 @@ void Label::setFont(std::string const& font) {
     updateChars();
 }
 
-void Label::addFont(std::string const& font, std::optional<float> scale) {
+void Label::addFont(geode::ZStringView font, std::optional<float> scale) {
     auto newConfig = BMFontConfiguration::create(font);
     if (!newConfig) {
         return;
@@ -463,7 +533,7 @@ void Label::addFont(std::string const& font, std::optional<float> scale) {
     this->addChild(batch, 0, m_fontBatches.size());
 }
 
-void Label::enableEmojis(std::string const& sheetFileName, const EmojiMap* frameNames) {
+void Label::enableEmojis(geode::ZStringView sheetFileName, EmojiMap const* frameNames) {
     if (m_spriteSheetBatch) {
         auto texture = cocos2d::CCTextureCache::get()->addImage(sheetFileName.c_str(), false);
         m_spriteSheetBatch->setTexture(texture);
@@ -475,7 +545,7 @@ void Label::enableEmojis(std::string const& sheetFileName, const EmojiMap* frame
     m_emojiMap = frameNames;
 }
 
-void Label::enableCustomNodes(const CustomNodeMap* nodes) {
+void Label::enableCustomNodes(CustomNodeMap* nodes) {
     m_customNodeMap = nodes;
 }
 
@@ -532,7 +602,7 @@ void Label::limitLabelWidth(float width, float defaultScale, float minScale) {
     this->setScale(scale);
 }
 
-float Label::kerningAmountForChars(uint32_t first, uint32_t second, const BMFontConfiguration* config) {
+float Label::kerningAmountForChars(uint32_t first, uint32_t second, BMFontConfiguration const* config) {
     auto& kerningDict = config->getKerningDictionary();
     auto it = kerningDict.find({first, second});
     if (it == kerningDict.end()) {
@@ -649,7 +719,7 @@ void Label::updateCharsWrapped() {
     auto lineHeight = commonHeight + m_extraLineSpacing;
 
     BMFontConfiguration* currentConfig = m_fontConfig;
-    const BMFontDef* fontDef = nullptr;
+    BMFontDef const* fontDef = nullptr;
     char32_t prevChar;
     float kerningAmount = 0;
     float nextX = 0;
@@ -657,7 +727,6 @@ void Label::updateCharsWrapped() {
     auto scaleFactor = cocos2d::CCDirector::get()->m_fContentScaleFactor;
 
     auto& spaceDef = mainCharset.at(' ');
-    auto spaceWidth = (m_extraKerning + spaceDef.xAdvance) / scaleFactor;
 
     std::vector<size_t> indices(m_fontBatches.size() + 1, 0);
     size_t emojiIndex = 0;
@@ -667,6 +736,8 @@ void Label::updateCharsWrapped() {
         float xOffset = 0.f;
         float fromX = 0;
         float toX = 0;
+        char32_t firstChar = 0; // for kerning (space -> first char)
+        char32_t lastChar = 0;  // for kerning (last char -> space)
     };
 
     std::vector<std::vector<Word>> spriteLines;
@@ -716,7 +787,8 @@ void Label::updateCharsWrapped() {
                     continue;
                 }
 
-                if (k == 0) {
+                if (currentSpriteWord.firstChar == 0) {
+                    currentSpriteWord.firstChar = c;
                     currentSpriteWord.xOffset = (m_extraKerning + fontDef->xOffset * scale) / scaleFactor;
                 }
 
@@ -750,6 +822,7 @@ void Label::updateCharsWrapped() {
                 auto advance = m_extraKerning + fontDef->xAdvance * scale + kerningAmount;
                 nextX += advance;
                 prevChar = c;
+                currentSpriteWord.lastChar = c;
 
                 ++index;
             }
@@ -760,6 +833,8 @@ void Label::updateCharsWrapped() {
             currentSpriteLine.push_back(std::move(currentSpriteWord));
             currentSpriteWord.sprites.clear();
             currentSpriteWord.xOffset = 0;
+            currentSpriteWord.firstChar = 0;
+            currentSpriteWord.lastChar = 0;
         }
 
         // add the line to the lines
@@ -772,7 +847,8 @@ void Label::updateCharsWrapped() {
     nextX = 0;
     auto maxWidth = m_wrapWidth / getScale();
     for (auto& spriteLine : spriteLines) {
-        for (auto& word : spriteLine) {
+        for (size_t wordIdx = 0; wordIdx < spriteLine.size(); ++wordIdx) {
+            auto& word = spriteLine[wordIdx];
             // auto wordWidth = getWordWidth(word.sprites);
             auto wordWidth = (word.toX - word.fromX) / scaleFactor;
             // nextX += word.xOffset;
@@ -795,8 +871,14 @@ void Label::updateCharsWrapped() {
                 nextX += wordWidth;
             }
 
-            // append space
-            nextX += spaceWidth;
+            // add space after the word
+            if (wordIdx + 1 < spriteLine.size()) {
+                auto& nextWord = spriteLine[wordIdx + 1];
+                float spaceKerning = kerningAmountForChars(word.lastChar, ' ', m_fontConfig)
+                                   + kerningAmountForChars(' ', nextWord.firstChar, m_fontConfig);
+                float spaceWidth = (m_extraKerning + spaceDef.xAdvance + spaceKerning) / scaleFactor;
+                nextX += spaceWidth;
+            }
         }
 
         // add the last line
@@ -838,8 +920,8 @@ void Label::updateCharsWrapped() {
     this->updateAlignment();
 }
 
-const BMFontDef* Label::getFontDefForChar(
-    char32_t c, const BMFontConfiguration* config, float& outScale, size_t& outIndex,
+BMFontDef const* Label::getFontDefForChar(
+    char32_t c, BMFontConfiguration const* config, float& outScale, size_t& outIndex,
     CachedBatch*& outBatch, BMFontConfiguration*& outConfig
 ) {
     auto& mainCharset = config->getFontDefDictionary();
@@ -1074,7 +1156,7 @@ void Label::updateChars() {
     auto lineHeight = commonHeight + m_extraLineSpacing;
 
     BMFontConfiguration* currentConfig = m_fontConfig;
-    const BMFontDef* fontDef = nullptr;
+    BMFontDef const* fontDef = nullptr;
     char32_t prevChar = -1;
     float kerningAmount = 0;
     float nextX = 0;
@@ -1190,7 +1272,7 @@ void Label::updateOpacity() const {
     }
 }
 
-bool Label::init(std::string_view text, std::string const& font, BMFontAlignment alignment, float scale) {
+bool Label::init(std::string_view text, geode::ZStringView font, BMFontAlignment alignment, float scale) {
     m_fontConfig = BMFontConfiguration::create(font);
     if (!m_fontConfig) {
         return false;
@@ -1201,7 +1283,6 @@ bool Label::init(std::string_view text, std::string const& font, BMFontAlignment
         return false;
     }
 
-    m_font = font;
     m_alignment = alignment;
 
     m_mainBatch->setID("main-batch");
@@ -1215,7 +1296,7 @@ bool Label::init(std::string_view text, std::string const& font, BMFontAlignment
 }
 
 bool Label::initWrapped(
-    std::string_view text, std::string const& font, BMFontAlignment alignment, float scale, float wrapWidth
+    std::string_view text, geode::ZStringView font, BMFontAlignment alignment, float scale, float wrapWidth
 ) {
     m_useWrap = true;
     m_wrapWidth = wrapWidth;

@@ -14,7 +14,7 @@ struct BMKerningPair {
     uint32_t first = 0;
     uint32_t second = 0;
 
-    bool operator==(const BMKerningPair& other) const = default;
+    bool operator==(BMKerningPair const& other) const = default;
 
     uint64_t toInt() const {
         return static_cast<uint64_t>(first) << 32 | second;
@@ -43,20 +43,20 @@ struct std::hash<BMKerningPair> {
 /// @brief Reimplementation of the CCBMFontConfiguration class, with a few modifications to make it more modern.
 class BMFontConfiguration {
 public:
-    static BMFontConfiguration* create(std::string const& fntFile);
+    static BMFontConfiguration* create(geode::ZStringView fntFile);
     static void purgeCachedData();
     BMFontConfiguration() = default;
 
 protected:
-    bool initWithFNTfile(std::string const& fntFile);
-    bool initWithContents(std::string const& contents, std::string const& fntFile);
+    bool initWithFNTfile(geode::ZStringView fntFile);
+    bool initWithContents(std::string_view contents, geode::ZStringView fntFile);
 
 private:
-    geode::Result<> parseInfoArguments(std::istringstream& line);
-    geode::Result<> parseImageFileName(std::istringstream& line, std::string const& fntFile);
-    geode::Result<> parseCommonArguments(std::istringstream& line);
-    geode::Result<> parseCharacterDefinition(std::istringstream& line);
-    geode::Result<> parseKerningEntry(std::istringstream& line);
+    geode::Result<> parseInfoArguments(std::string_view line);
+    geode::Result<> parseImageFileName(std::string_view line, std::string_view fntFile);
+    geode::Result<> parseCommonArguments(std::string_view line);
+    geode::Result<> parseCharacterDefinition(std::string_view line);
+    geode::Result<> parseKerningEntry(std::string_view line);
 
 public:
     std::unordered_map<uint32_t, BMFontDef> const& getFontDefDictionary() const { return m_fontDefDictionary; }
@@ -64,12 +64,14 @@ public:
     float getCommonHeight() const { return m_commonHeight; }
     BMFontPadding const& getPadding() const { return m_padding; }
     std::string const& getAtlasName() const { return m_atlasName; }
+    std::string const& getFontFile() const { return m_fntFileName; }
 
 protected:
     std::unordered_map<uint32_t, BMFontDef> m_fontDefDictionary;
     std::unordered_map<BMKerningPair, float> m_kerningDictionary;
     float m_commonHeight = 0;
     BMFontPadding m_padding;
+    std::string m_fntFileName;
     std::string m_atlasName;
 };
 
@@ -86,45 +88,45 @@ enum class BMFontAlignment {
 class Label : public cocos2d::CCNode, public cocos2d::CCRGBAProtocol, public cocos2d::CCLabelProtocol {
 public:
     /// @brief Create a label with text and bitmap font file.
-    static Label* create(std::string_view text, std::string const& font);
+    static Label* create(std::string_view text, geode::ZStringView font);
 
     /// @brief Create a label with text, bitmap font file, and scale.
-    static Label* create(std::string_view text, std::string const& font, float scale);
+    static Label* create(std::string_view text, geode::ZStringView font, float scale);
 
     /// @brief Create a label with text, bitmap font file, and alignment.
-    static Label* create(std::string_view text, std::string const& font, BMFontAlignment alignment);
+    static Label* create(std::string_view text, geode::ZStringView font, BMFontAlignment alignment);
 
     /// @brief Create a label with text, bitmap font file, alignment, and scale.
-    static Label* create(std::string_view text, std::string const& font, BMFontAlignment alignment, float scale);
+    static Label* create(std::string_view text, geode::ZStringView font, BMFontAlignment alignment, float scale);
 
     /// @brief Create a wrapped label with text, bitmap font file, scale and wrap width.
-    static Label* createWrapped(std::string_view text, std::string const& font, float wrapWidth);
+    static Label* createWrapped(std::string_view text, geode::ZStringView font, float wrapWidth);
 
     /// @brief Create a wrapped label with text, bitmap font file, alignment, scale and wrap width.
-    static Label* createWrapped(std::string_view text, std::string const& font, float scale, float wrapWidth);
+    static Label* createWrapped(std::string_view text, geode::ZStringView font, float scale, float wrapWidth);
 
     /// @brief Create a wrapped label with text, bitmap font file, alignment, and wrap width.
-    static Label* createWrapped(std::string_view text, std::string const& font, BMFontAlignment alignment, float wrapWidth);
+    static Label* createWrapped(std::string_view text, geode::ZStringView font, BMFontAlignment alignment, float wrapWidth);
 
     /// @brief Create a wrapped label with text, bitmap font file, alignment, scale and wrap width.
-    static Label* createWrapped(std::string_view text, std::string const& font, BMFontAlignment alignment, float scale, float wrapWidth);
+    static Label* createWrapped(std::string_view text, geode::ZStringView font, BMFontAlignment alignment, float scale, float wrapWidth);
 
 public:
-    using EmojiMap = std::unordered_map<std::u32string_view, const char*>;
-    using CustomNodeMap = std::unordered_map<std::u32string_view, std::function<CCNode*(std::u32string_view, uint32_t&)>>;
+    using EmojiMap = std::unordered_map<std::u32string_view, char const*>;
+    using CustomNodeMap = std::unordered_map<std::u32string_view, geode::Function<CCNode*(std::u32string_view, uint32_t&)>>;
 
     /// @brief Set the contents of the label.
     void setString(std::string_view text);
     /// @brief Get the contents of the label.
     [[nodiscard]] std::string const& getString() const { return m_text; }
     /// @brief Set the primary font of the label.
-    void setFont(std::string const& font);
+    void setFont(geode::ZStringView font);
     /// @brief Add additional font to the label. (for multi-font labels)
-    void addFont(std::string const& font, std::optional<float> scale = std::nullopt);
+    void addFont(geode::ZStringView font, std::optional<float> scale = std::nullopt);
     /// @brief Activate support for emojis in the label.
-    void enableEmojis(std::string const& sheetFileName, const EmojiMap* frameNames);
+    void enableEmojis(geode::ZStringView sheetFileName, EmojiMap const* frameNames);
     /// @brief Activate support for custom nodes in the label.
-    void enableCustomNodes(const CustomNodeMap* nodes);
+    void enableCustomNodes(CustomNodeMap* nodes);
     /// @brief Enable or disable line wrapping.
     void setWrapEnabled(bool enabled);
     /// @brief Set the wrap width of the label.
@@ -134,7 +136,7 @@ public:
     /// @brief Whether emojis should inherit the color of the label.
     void enableEmojiColors(bool enabled);
     /// @brief Get the primary font atlas name.
-    [[nodiscard]] std::string const& getFont() const { return m_font; }
+    [[nodiscard]] std::string const& getFont() const { return m_fontConfig->getFontFile(); }
     /// @brief Get the alignment of the label.
     [[nodiscard]] BMFontAlignment getAlignment() const { return m_alignment; }
     /// @brief Set the alignment of the label.
@@ -172,7 +174,7 @@ protected:
         }
     };
 
-    static float kerningAmountForChars(uint32_t first, uint32_t second, const BMFontConfiguration* config);
+    static float kerningAmountForChars(uint32_t first, uint32_t second, BMFontConfiguration const* config);
 
     /// @brief Hide all characters of the label.
     void hideAllChars();
@@ -187,8 +189,8 @@ protected:
     void updateCharsWrapped();
 
     /// @brief Find the font definition for the specified character. [Internal]
-    const BMFontDef* getFontDefForChar(
-        char32_t c, const BMFontConfiguration* config,
+    BMFontDef const* getFontDefForChar(
+        char32_t c, BMFontConfiguration const* config,
         float& outScale, size_t& outIndex,
         CachedBatch*& outBatch,
         BMFontConfiguration*& outConfig
@@ -249,12 +251,12 @@ public:
 
     /// === CCLabelProtocol ===
 
-    void setString(const char* label) override { this->setString(std::string_view(label)); }
-    const char* getString() override { return m_text.c_str(); }
+    void setString(char const* label) override { this->setString(std::string_view(label)); }
+    char const* getString() override { return m_text.c_str(); }
 
 protected:
-    bool init(std::string_view text, std::string const& font, BMFontAlignment alignment, float scale);
-    bool initWrapped(std::string_view text, std::string const& font, BMFontAlignment alignment, float scale, float wrapWidth);
+    bool init(std::string_view text, geode::ZStringView font, BMFontAlignment alignment, float scale);
+    bool initWrapped(std::string_view text, geode::ZStringView font, BMFontAlignment alignment, float scale, float wrapWidth);
 
 protected:
     // Protocol properties
@@ -264,7 +266,6 @@ protected:
 
     // Label properties
     std::string m_text;                                  // UTF-8 encoded text
-    std::string m_font;                                  // primary font atlas name
     std::u32string m_unicodeText;                        // UTF-32 encoded text
     BMFontAlignment m_alignment = BMFontAlignment::Left; // text alignment
     BMFontConfiguration* m_fontConfig = nullptr;         // primary font configuration
@@ -296,8 +297,8 @@ protected:
     //      cocos2d::CCSprite* sprite = nullptr;
     //  };
 
-    const EmojiMap* m_emojiMap = nullptr;            // emoji map (MAP SHOULD BE GLOBAL AND NEVER DESTROYED)
-    const CustomNodeMap* m_customNodeMap = nullptr;  // custom node map (MAP SHOULD BE GLOBAL AND NEVER DESTROYED)
+    EmojiMap const* m_emojiMap = nullptr;            // emoji map (MAP SHOULD BE GLOBAL AND NEVER DESTROYED)
+    CustomNodeMap* m_customNodeMap = nullptr;  // custom node map (MAP SHOULD BE GLOBAL AND NEVER DESTROYED)
     std::vector<std::vector<CCNode*>> m_lines;       // lines of characters
     std::vector<cocos2d::CCSprite*> m_sprites;       // all sprites in the label (for faster access)
     //  std::vector<Chunk> m_chunks;                 // chunks containing metadata
