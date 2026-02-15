@@ -1,16 +1,12 @@
 #include <AdvancedLabel.hpp>
+
+#include <Geode/loader/GameEvent.hpp>
 #include <Geode/loader/Log.hpp>
 #include <Geode/utils/general.hpp>
 #include <Geode/utils/string.hpp>
 #include <Geode/utils/StringMap.hpp>
 
-#include <Geode/modify/GameManager.hpp>
-struct ClearCacheGMHook : geode::Modify<ClearCacheGMHook, GameManager> {
-    void reloadAllStep5() {
-        GameManager::reloadAllStep5();
-        BMFontConfiguration::purgeCachedData();
-    }
-};
+$on_game(TexturesUnloaded) { BMFontConfiguration::purgeCachedData(); }
 
 geode::utils::StringMap<BMFontConfiguration>& getFontConfigs() {
     static geode::utils::StringMap<BMFontConfiguration> s_fontConfigs;
