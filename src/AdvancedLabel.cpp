@@ -220,8 +220,8 @@ geode::Result<> BMFontConfiguration::parseImageFileName(std::string_view line, s
                 value = value.substr(1, value.size() - 2);
             }
 
-            geode::utils::StringBuffer fntFileBuf(fntFile);
-            geode::utils::StringBuffer relPathBuf(value);
+            geode::utils::StringBuffer<> fntFileBuf(fntFile);
+            geode::utils::StringBuffer<> relPathBuf(value);
 
             m_atlasName = cocos2d::CCFileUtils::get()->fullPathFromRelativeFile(
                 relPathBuf.c_str(), fntFileBuf.c_str()
