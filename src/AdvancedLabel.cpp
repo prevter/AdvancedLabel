@@ -861,7 +861,7 @@ void Label::updateCharsWrapped() {
                 auto front = word.sprites.front();
                 float startX = front->m_obPosition.x - front->m_obContentSize.width * front->m_fScaleX * 0.5f;
                 for (auto& sprite : word.sprites) {
-                    sprite->m_obPosition.x += nextX - startX;
+                    sprite->setPositionX(sprite->m_obPosition.x + nextX - startX);
                     currentLine.push_back(sprite);
                 }
                 nextX += wordWidth;
@@ -889,7 +889,7 @@ void Label::updateCharsWrapped() {
     float maxLineWidth = 0;
     for (auto& line : m_lines) {
         for (auto& sprite : line) {
-            sprite->m_obPosition.y += nextY;
+            sprite->setPositionY(sprite->m_obPosition.y + nextY);
             maxLineWidth = std::max(maxLineWidth, sprite->m_obPosition.x + sprite->m_obContentSize.width * sprite->m_fScaleX);
         }
         nextY -= commonHeightScaled;
