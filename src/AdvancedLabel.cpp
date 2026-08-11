@@ -385,8 +385,8 @@ struct Rect {
     }
 };
 
-Label* Label::create(std::string_view text, geode::ZStringView font) {
-    auto ret = new Label();
+AdvancedLabel* AdvancedLabel::create(std::string_view text, geode::ZStringView font) {
+    auto ret = new AdvancedLabel();
     if (ret->init(text, font, BMFontAlignment::Left, 1.f)) {
         ret->autorelease();
         return ret;
@@ -395,8 +395,8 @@ Label* Label::create(std::string_view text, geode::ZStringView font) {
     return nullptr;
 }
 
-Label* Label::create(std::string_view text, geode::ZStringView font, float scale) {
-    auto ret = new Label();
+AdvancedLabel* AdvancedLabel::create(std::string_view text, geode::ZStringView font, float scale) {
+    auto ret = new AdvancedLabel();
     if (ret->init(text, font, BMFontAlignment::Left, scale)) {
         ret->autorelease();
         return ret;
@@ -405,8 +405,8 @@ Label* Label::create(std::string_view text, geode::ZStringView font, float scale
     return nullptr;
 }
 
-Label* Label::create(std::string_view text, geode::ZStringView font, BMFontAlignment alignment) {
-    auto ret = new Label();
+AdvancedLabel* AdvancedLabel::create(std::string_view text, geode::ZStringView font, BMFontAlignment alignment) {
+    auto ret = new AdvancedLabel();
     if (ret->init(text, font, alignment, 1.f)) {
         ret->autorelease();
         return ret;
@@ -415,8 +415,8 @@ Label* Label::create(std::string_view text, geode::ZStringView font, BMFontAlign
     return nullptr;
 }
 
-Label* Label::create(std::string_view text, geode::ZStringView font, BMFontAlignment alignment, float scale) {
-    auto ret = new Label();
+AdvancedLabel* AdvancedLabel::create(std::string_view text, geode::ZStringView font, BMFontAlignment alignment, float scale) {
+    auto ret = new AdvancedLabel();
     if (ret->init(text, font, alignment, scale)) {
         ret->autorelease();
         return ret;
@@ -425,8 +425,8 @@ Label* Label::create(std::string_view text, geode::ZStringView font, BMFontAlign
     return nullptr;
 }
 
-Label* Label::createWrapped(std::string_view text, geode::ZStringView font, float wrapWidth) {
-    auto ret = new Label();
+AdvancedLabel* AdvancedLabel::createWrapped(std::string_view text, geode::ZStringView font, float wrapWidth) {
+    auto ret = new AdvancedLabel();
     if (ret->initWrapped(text, font, BMFontAlignment::Left, 1.f, wrapWidth)) {
         ret->autorelease();
         return ret;
@@ -435,8 +435,8 @@ Label* Label::createWrapped(std::string_view text, geode::ZStringView font, floa
     return nullptr;
 }
 
-Label* Label::createWrapped(std::string_view text, geode::ZStringView font, float scale, float wrapWidth) {
-    auto ret = new Label();
+AdvancedLabel* AdvancedLabel::createWrapped(std::string_view text, geode::ZStringView font, float scale, float wrapWidth) {
+    auto ret = new AdvancedLabel();
     if (ret->initWrapped(text, font, BMFontAlignment::Left, scale, wrapWidth)) {
         ret->autorelease();
         return ret;
@@ -445,8 +445,8 @@ Label* Label::createWrapped(std::string_view text, geode::ZStringView font, floa
     return nullptr;
 }
 
-Label* Label::createWrapped(std::string_view text, geode::ZStringView font, BMFontAlignment alignment, float wrapWidth) {
-    auto ret = new Label();
+AdvancedLabel* AdvancedLabel::createWrapped(std::string_view text, geode::ZStringView font, BMFontAlignment alignment, float wrapWidth) {
+    auto ret = new AdvancedLabel();
     if (ret->initWrapped(text, font, alignment, 1.f, wrapWidth)) {
         ret->autorelease();
         return ret;
@@ -455,10 +455,10 @@ Label* Label::createWrapped(std::string_view text, geode::ZStringView font, BMFo
     return nullptr;
 }
 
-Label* Label::createWrapped(
+AdvancedLabel* AdvancedLabel::createWrapped(
     std::string_view text, geode::ZStringView font, BMFontAlignment alignment, float scale, float wrapWidth
 ) {
-    auto ret = new Label();
+    auto ret = new AdvancedLabel();
     if (ret->initWrapped(text, font, alignment, scale, wrapWidth)) {
         ret->autorelease();
         return ret;
@@ -467,7 +467,7 @@ Label* Label::createWrapped(
     return nullptr;
 }
 
-void Label::setString(std::string_view text) {
+void AdvancedLabel::setString(std::string_view text) {
     if (m_text == text) {
         return;
     }
@@ -488,7 +488,7 @@ void Label::setString(std::string_view text) {
     updateChars();
 }
 
-void Label::setFont(geode::ZStringView font) {
+void AdvancedLabel::setFont(geode::ZStringView font) {
     if (m_fontConfig->getFontFile() == font) {
         return;
     }
@@ -509,7 +509,7 @@ void Label::setFont(geode::ZStringView font) {
     updateChars();
 }
 
-void Label::addFont(geode::ZStringView font, std::optional<float> scale) {
+void AdvancedLabel::addFont(geode::ZStringView font, std::optional<float> scale) {
     auto newConfig = BMFontConfiguration::create(font);
     if (!newConfig) {
         return;
@@ -529,7 +529,7 @@ void Label::addFont(geode::ZStringView font, std::optional<float> scale) {
     this->addChild(batch, 0, m_fontBatches.size());
 }
 
-void Label::enableEmojis(geode::ZStringView sheetFileName, EmojiMap const* frameNames) {
+void AdvancedLabel::enableEmojis(geode::ZStringView sheetFileName, EmojiMap const* frameNames) {
     if (m_spriteSheetBatch) {
         auto texture = cocos2d::CCTextureCache::get()->addImage(sheetFileName.c_str(), false);
         m_spriteSheetBatch->setTexture(texture);
@@ -541,11 +541,11 @@ void Label::enableEmojis(geode::ZStringView sheetFileName, EmojiMap const* frame
     m_emojiMap = frameNames;
 }
 
-void Label::enableCustomNodes(CustomNodeMap* nodes) {
+void AdvancedLabel::enableCustomNodes(CustomNodeMap* nodes) {
     m_customNodeMap = nodes;
 }
 
-void Label::setWrapEnabled(bool enabled) {
+void AdvancedLabel::setWrapEnabled(bool enabled) {
     if (m_useWrap == enabled) {
         return;
     }
@@ -554,7 +554,7 @@ void Label::setWrapEnabled(bool enabled) {
     updateChars();
 }
 
-void Label::setWrapWidth(float width) {
+void AdvancedLabel::setWrapWidth(float width) {
     if (m_wrapWidth == width) {
         return;
     }
@@ -563,18 +563,18 @@ void Label::setWrapWidth(float width) {
     updateChars();
 }
 
-void Label::setWrap(bool enabled, float width) {
+void AdvancedLabel::setWrap(bool enabled, float width) {
     m_useWrap = enabled;
     m_wrapWidth = width;
     updateChars();
 }
 
-void Label::enableEmojiColors(bool enabled) {
+void AdvancedLabel::enableEmojiColors(bool enabled) {
     m_useEmojiColors = enabled;
     updateColors();
 }
 
-void Label::setAlignment(BMFontAlignment alignment) {
+void AdvancedLabel::setAlignment(BMFontAlignment alignment) {
     if (m_alignment == alignment) {
         return;
     }
@@ -583,7 +583,7 @@ void Label::setAlignment(BMFontAlignment alignment) {
     updateChars();
 }
 
-void Label::limitLabelWidth(float width, float defaultScale, float minScale) {
+void AdvancedLabel::limitLabelWidth(float width, float defaultScale, float minScale) {
     auto originalWidth = m_obContentSize.width;
     auto scale = 1.f;
     if (originalWidth > width && width > 0.0f) {
@@ -598,7 +598,7 @@ void Label::limitLabelWidth(float width, float defaultScale, float minScale) {
     this->setScale(scale);
 }
 
-float Label::kerningAmountForChars(uint32_t first, uint32_t second, BMFontConfiguration const* config) {
+float AdvancedLabel::kerningAmountForChars(uint32_t first, uint32_t second, BMFontConfiguration const* config) {
     auto& kerningDict = config->getKerningDictionary();
     auto it = kerningDict.find({first, second});
     if (it == kerningDict.end()) {
@@ -607,7 +607,7 @@ float Label::kerningAmountForChars(uint32_t first, uint32_t second, BMFontConfig
     return it->second;
 }
 
-void Label::hideAllChars() {
+void AdvancedLabel::hideAllChars() {
     for (auto sprite : m_sprites) {
         sprite->m_bVisible = false;
         sprite->m_bDirty = true;
@@ -619,7 +619,7 @@ void Label::hideAllChars() {
     m_customNodes.clear();
 }
 
-void Label::updateAlignment() const {
+void AdvancedLabel::updateAlignment() const {
     if ((m_alignment == BMFontAlignment::Left || m_lines.size() < 2) && !m_useWrap) {
         return;
     }
@@ -655,7 +655,7 @@ void Label::updateAlignment() const {
     }
 }
 
-float Label::getWordWidth(std::vector<cocos2d::CCSprite*> const& word) {
+float AdvancedLabel::getWordWidth(std::vector<cocos2d::CCSprite*> const& word) {
     if (word.empty()) {
         return 0.f;
     }
@@ -671,7 +671,7 @@ float Label::getWordWidth(std::vector<cocos2d::CCSprite*> const& word) {
     return lastPos - firstPos + lastSize * 0.5f + firstSize * 0.5f;
 }
 
-void Label::updateCharsWrapped() {
+void AdvancedLabel::updateCharsWrapped() {
     auto stringLen = m_unicodeText.size();
     auto textSV = std::u32string_view(m_unicodeText);
 
@@ -916,7 +916,7 @@ void Label::updateCharsWrapped() {
     this->updateAlignment();
 }
 
-BMFontDef const* Label::getFontDefForChar(
+BMFontDef const* AdvancedLabel::getFontDefForChar(
     char32_t c, BMFontConfiguration const* config, float& outScale, size_t& outIndex,
     CachedBatch*& outBatch, BMFontConfiguration*& outConfig
 ) {
@@ -957,7 +957,7 @@ BMFontDef const* Label::getFontDefForChar(
     return nullptr;
 }
 
-std::u32string_view Label::parseEmoji(std::u32string_view text, uint32_t& index) const {
+std::u32string_view AdvancedLabel::parseEmoji(std::u32string_view text, uint32_t& index) const {
     size_t emojiStart = index;
     size_t i = index;
 
@@ -997,7 +997,7 @@ std::u32string_view Label::parseEmoji(std::u32string_view text, uint32_t& index)
     return text.substr(emojiStart, i - emojiStart + 1);
 }
 
-void Label::checkForEmoji(
+void AdvancedLabel::checkForEmoji(
     std::u32string_view text, uint32_t& index, float scaleFactor, float& nextX, float nextY, float commonHeight,
     float& longestLine, std::vector<CCNode*>& currentLine, size_t& emojiIndex
 ) {
@@ -1091,7 +1091,7 @@ void Label::checkForEmoji(
     }
 }
 
-cocos2d::CCSprite* Label::getSpriteForChar(
+cocos2d::CCSprite* AdvancedLabel::getSpriteForChar(
     CachedBatch& batch, size_t index, float scale, cocos2d::CCRect const& rect
 ) const {
     auto fontChar = batch[index];
@@ -1117,7 +1117,7 @@ cocos2d::CCSprite* Label::getSpriteForChar(
     return fontChar;
 }
 
-void Label::updateChars() {
+void AdvancedLabel::updateChars() {
     hideAllChars();
 
     //      if (m_useChunks) {
@@ -1247,7 +1247,7 @@ void Label::updateChars() {
     this->updateAlignment();
 }
 
-void Label::updateColors() const {
+void AdvancedLabel::updateColors() const {
     for (auto sprite : m_sprites) {
         if (m_useEmojiColors) {
             sprite->setColor(m_color);
@@ -1262,13 +1262,13 @@ void Label::updateColors() const {
     }
 }
 
-void Label::updateOpacity() const {
+void AdvancedLabel::updateOpacity() const {
     for (auto sprite : m_sprites) {
         sprite->setOpacity(m_opacity);
     }
 }
 
-bool Label::init(std::string_view text, geode::ZStringView font, BMFontAlignment alignment, float scale) {
+bool AdvancedLabel::init(std::string_view text, geode::ZStringView font, BMFontAlignment alignment, float scale) {
     m_fontConfig = BMFontConfiguration::create(font);
     if (!m_fontConfig) {
         return false;
@@ -1291,7 +1291,7 @@ bool Label::init(std::string_view text, geode::ZStringView font, BMFontAlignment
     return true;
 }
 
-bool Label::initWrapped(
+bool AdvancedLabel::initWrapped(
     std::string_view text, geode::ZStringView font, BMFontAlignment alignment, float scale, float wrapWidth
 ) {
     m_useWrap = true;

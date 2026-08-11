@@ -85,31 +85,31 @@ enum class BMFontAlignment {
 
 /// @brief Multifunctional label node, that is more optimized and feature complete than the available CCLabelBMFont/TextArea ones.
 /// Supports features like line wrapping, multiple fonts, batched emojis and more.
-class Label : public cocos2d::CCNode, public cocos2d::CCRGBAProtocol, public cocos2d::CCLabelProtocol {
+class AdvancedLabel : public cocos2d::CCNode, public cocos2d::CCRGBAProtocol, public cocos2d::CCLabelProtocol {
 public:
     /// @brief Create a label with text and bitmap font file.
-    static Label* create(std::string_view text, geode::ZStringView font);
+    static AdvancedLabel* create(std::string_view text, geode::ZStringView font);
 
     /// @brief Create a label with text, bitmap font file, and scale.
-    static Label* create(std::string_view text, geode::ZStringView font, float scale);
+    static AdvancedLabel* create(std::string_view text, geode::ZStringView font, float scale);
 
     /// @brief Create a label with text, bitmap font file, and alignment.
-    static Label* create(std::string_view text, geode::ZStringView font, BMFontAlignment alignment);
+    static AdvancedLabel* create(std::string_view text, geode::ZStringView font, BMFontAlignment alignment);
 
     /// @brief Create a label with text, bitmap font file, alignment, and scale.
-    static Label* create(std::string_view text, geode::ZStringView font, BMFontAlignment alignment, float scale);
+    static AdvancedLabel* create(std::string_view text, geode::ZStringView font, BMFontAlignment alignment, float scale);
 
     /// @brief Create a wrapped label with text, bitmap font file, scale and wrap width.
-    static Label* createWrapped(std::string_view text, geode::ZStringView font, float wrapWidth);
+    static AdvancedLabel* createWrapped(std::string_view text, geode::ZStringView font, float wrapWidth);
 
     /// @brief Create a wrapped label with text, bitmap font file, alignment, scale and wrap width.
-    static Label* createWrapped(std::string_view text, geode::ZStringView font, float scale, float wrapWidth);
+    static AdvancedLabel* createWrapped(std::string_view text, geode::ZStringView font, float scale, float wrapWidth);
 
     /// @brief Create a wrapped label with text, bitmap font file, alignment, and wrap width.
-    static Label* createWrapped(std::string_view text, geode::ZStringView font, BMFontAlignment alignment, float wrapWidth);
+    static AdvancedLabel* createWrapped(std::string_view text, geode::ZStringView font, BMFontAlignment alignment, float wrapWidth);
 
     /// @brief Create a wrapped label with text, bitmap font file, alignment, scale and wrap width.
-    static Label* createWrapped(std::string_view text, geode::ZStringView font, BMFontAlignment alignment, float scale, float wrapWidth);
+    static AdvancedLabel* createWrapped(std::string_view text, geode::ZStringView font, BMFontAlignment alignment, float scale, float wrapWidth);
 
 public:
     using EmojiMap = std::unordered_map<std::u32string_view, char const*>;
